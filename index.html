@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>E-Catalog | Digital Flipbook</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ============ ERROR SCREEN ============ -->
+  <div id="error-screen" class="error-screen hidden">
+    <div class="error-inner">
+      <div class="error-icon">!</div>
+      <h2>Katalog tidak dapat dimuat</h2>
+      <p id="error-message">Terjadi kesalahan saat memuat berkas PDF.</p>
+      <pre id="error-details" class="error-details hidden" aria-hidden="true"></pre>
+      <button id="error-retry-btn" class="btn-primary">Coba Lagi</button>
+    </div>
+  </div>
+
+  <!-- ============ APP SHELL ============ -->
+  <div id="app" class="app hidden">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <img class="brand-logo brand-logo--toyota" src="assets/image/Logo Toyota White.png" alt="Toyota" />
+      </div>
+
+      <div class="topbar-center">
+        <span class="brand-text">TAG</span>
+        <span class="brand-text">CATALOGUE</span>
+      </div>
+
+      <div class="topbar-right">
+        <img class="brand-logo brand-logo--tag" src="assets/image/Logo TAG-white.png" alt="TAG" />
+      </div>
+    </header>
+
+    <!-- MAIN STAGE -->
+    <main class="stage" id="stage">
+      <div class="book-shell" id="book-shell">
+
+        <!-- book spine glow / thickness indicator -->
+        <!-- <div class="book-thickness left" aria-hidden="true"></div>
+        <div class="book-thickness right" aria-hidden="true"></div> -->
+
+        <div id="flipbook" class="flipbook"></div>
+
+        <!-- corner drag affordance hints -->
+        <div class="corner-hint corner-hint--tr" aria-hidden="true"></div>
+        <div class="corner-hint corner-hint--br" aria-hidden="true"></div>
+      </div>
+
+      <!-- interaction hint -->
+      <div class="drag-hint" id="drag-hint">
+        <span class="drag-hint-arrow">↔</span>
+        <span>Seret sudut halaman untuk membalik</span>
+      </div>
+
+      <!-- side click zones (fallback secondary interaction, still page-turn based) -->
+      <button class="nav-zone nav-zone--prev" id="nav-prev" aria-label="Halaman sebelumnya"></button>
+      <button class="nav-zone nav-zone--next" id="nav-next" aria-label="Halaman berikutnya"></button>
+    </main>
+
+    <!-- BOTTOM BAR -->
+    <footer class="bottombar">
+      <button class="icon-btn bottombar-zoom" id="btn-zoom-out" title="Perkecil" aria-label="Perkecil">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <button class="icon-btn bottombar-zoom" id="btn-zoom-in" title="Perbesar" aria-label="Perbesar">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <div class="page-indicator">
+        <span id="page-current">1</span> / <span id="page-total">20</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ============ LIBRARIES (CDN) ============ -->
+  <!-- PDF.js: merender halaman PDF menjadi gambar/canvas di browser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- StPageFlip: engine animasi balik halaman 3D yang realistis -->
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+
+  <script src="js/flipbook.js"></script>
+</body>
+</html>
