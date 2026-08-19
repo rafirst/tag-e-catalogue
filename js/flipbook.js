@@ -37,7 +37,7 @@
   const CONFIG = {
     // Ganti path ini dengan PDF katalog asli Anda kapan saja.
     // Updated to use the newly uploaded PDF (replace filename if different).
-    PDF_URL: "assets/catalog/TAG-E-CATALOGUE-07-2026.pdf",
+    PDF_URL: "assets/catalog/TAG-E-CATALOGUE.pdf",
 
     // Kualitas render halaman (device pixel ratio dibatasi demi performa)
     // Increase render scale and max DPR for HD output in the flipbook
