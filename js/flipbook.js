@@ -54,7 +54,7 @@
     ZOOM_MAX: 2.4,
     ZOOM_STEP: 0.25,
 
-    LOADING_TIMEOUT_MS: 25000,
+    LOADING_TIMEOUT_MS: 120000,
   };
 
   /* ------------------------------------------------------------------
@@ -161,8 +161,8 @@
         console.warn("Gagal membaca rasio halaman pertama, pakai rasio default.", aspectErr);
       }
     } catch (err) {
-      console.warn("Gagal memuat PDF, beralih ke mode demo:", err);
-      enterDemoMode();
+      console.error("Gagal memuat PDF:", err);
+      throw err;
     }
   }
 
