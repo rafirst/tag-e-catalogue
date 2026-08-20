@@ -544,7 +544,7 @@ button {
   .drag-hint { font-size: 11px; padding: 8px 16px; }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   :root {
     --topbar-h: 54px;
     --bottombar-h: 46px;
@@ -554,6 +554,14 @@ button {
   .brand-logo--tag { height: 24px; }
   .brand-logo--toyota { height: 20px; }
   .stage { padding: 8px; }
+  .book-shell {
+    width: 100%;
+    height: 100%;
+  }
+  #flipbook {
+    width: 100%;
+    height: 100%;
+  }
   .book-thickness { display: none; }
 }
 

@@ -37,9 +37,7 @@
   const CONFIG = {
     // Ganti path ini dengan PDF katalog asli Anda kapan saja.
     // Updated to use the newly uploaded PDF (replace filename if different).
-    PDF_URL: window.location.hostname.endsWith("github.io")
-      ? "https://media.githubusercontent.com/media/rafirst/tag-e-catalogue/main/assets/catalog/TAG-E-CATALOGUE.pdf"
-      : "assets/catalog/TAG-E-CATALOGUE.pdf",
+    PDF_URL: "https://media.githubusercontent.com/media/rafirst/tag-e-catalogue/main/assets/catalog/TAG-E-CATALOGUE.pdf",
 
     // Kualitas render halaman (device pixel ratio dibatasi demi performa)
     // Increase render scale and max DPR for HD output in the flipbook
@@ -63,6 +61,8 @@
   const state = {
     pdfDoc: null,
     pageCount: 0,
+    sourcePageCount: 0,
+    pagesPerPdfPage: 1,
     pageFlip: null,
     renderedPages: new Map(), // pageNumber -> dataURL
     pageMeta: {}, // diagnostics per page (width/height/edge-white%)
@@ -143,8 +143,8 @@
 
     try {
       state.pdfDoc = await Promise.race([loadingTask.promise, timeout]);
-      state.pageCount = state.pdfDoc.numPages; // deteksi dinamis, tidak hardcode
-      if (state.pageCount < 1) throw new Error("EMPTY_PDF");
+      state.sourcePageCount = state.pdfDoc.numPages;
+      if (state.sourcePageCount < 1) throw new Error("EMPTY_PDF");
 
       // PENTING: deteksi rasio aspek halaman ASLI dari PDF di sini, SEBELUM
       // FlipEngine dibuat. Sebelumnya rasio aspek baru diketahui setelah
@@ -156,9 +156,13 @@
       try {
         const firstPage = await state.pdfDoc.getPage(1);
         const rawViewport = firstPage.getViewport({ scale: 1 });
-        state.pageAspect = rawViewport.height / rawViewport.width;
+        state.pagesPerPdfPage = rawViewport.width > rawViewport.height ? 2 : 1;
+        state.pageCount = state.sourcePageCount * state.pagesPerPdfPage;
+        state.pageAspect = rawViewport.height / (rawViewport.width / state.pagesPerPdfPage);
       } catch (aspectErr) {
         console.warn("Gagal membaca rasio halaman pertama, pakai rasio default.", aspectErr);
+        state.pagesPerPdfPage = 1;
+        state.pageCount = state.sourcePageCount;
       }
     } catch (err) {
       console.error("Gagal memuat PDF:", err);
@@ -192,7 +196,9 @@
       return dataUrl;
     }
 
-    const page = await state.pdfDoc.getPage(pageNumber);
+    const sourcePageNumber = Math.ceil(pageNumber / state.pagesPerPdfPage);
+    const pageSide = (pageNumber - 1) % state.pagesPerPdfPage;
+    const page = await state.pdfDoc.getPage(sourcePageNumber);
     const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_DPR);
     // Determine target page CSS size (width & height) from FlipEngine so the
     // rendered image resolution is high enough to fully COVER the display
@@ -213,17 +219,40 @@
     // tinggi (logika yang sama seperti object-fit: cover), supaya hasil
     // render tetap tajam di kedua dimensi, bukan hanya mengikuti lebar.
     const unscaled = page.getViewport({ scale: 1 });
-    const scaleForWidth = (targetPageCssW * dpr) / unscaled.width;
+    const scaleForWidth = (targetPageCssW * state.pagesPerPdfPage * dpr) / unscaled.width;
     const scaleForHeight = (targetPageCssH * dpr) / unscaled.height;
     const scale = Math.max(1, scaleForWidth, scaleForHeight);
     const viewport = page.getViewport({ scale });
 
-    const canvas = document.createElement("canvas");
+    let canvas = document.createElement("canvas");
     canvas.width = Math.round(viewport.width);
     canvas.height = Math.round(viewport.height);
-    const ctx = canvas.getContext("2d");
+    let ctx = canvas.getContext("2d");
 
     await page.render({ canvasContext: ctx, viewport }).promise;
+
+    if (state.pagesPerPdfPage === 2) {
+      const halfWidth = Math.floor(canvas.width / 2);
+      const splitCanvas = document.createElement("canvas");
+      splitCanvas.width = halfWidth;
+      splitCanvas.height = canvas.height;
+      const splitCtx = splitCanvas.getContext("2d");
+      splitCtx.drawImage(
+        canvas,
+        pageSide * halfWidth,
+        0,
+        halfWidth,
+        canvas.height,
+        0,
+        0,
+        halfWidth,
+        canvas.height
+      );
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = splitCanvas;
+      ctx = splitCtx;
+    }
 
     // Analyze edges for large white gutters (diagnostic)
     try {
@@ -313,7 +342,7 @@
 
     // Simpan rasio aspek dari halaman pertama untuk menyesuaikan bentuk buku
     if (pageNumber === 1) {
-      state.pageAspect = viewport.height / viewport.width;
+      state.pageAspect = canvas.height / canvas.width;
     }
 
     canvas.width = 0; // bantu GC, hindari kebocoran memori kanvas besar
@@ -477,22 +506,24 @@
       const topbarH = parseInt(rootStyle.getPropertyValue('--topbar-h')) || 64;
       const bottombarH = parseInt(rootStyle.getPropertyValue('--bottombar-h')) || 56;
       const gutter = 24;
+      const isMobile = window.innerWidth <= 768;
 
       const viewportW = Math.max(480, window.innerWidth - gutter * 2);
       const viewportH = Math.max(360, window.innerHeight - topbarH - bottombarH - gutter * 2);
       const pageAspect = state.pageAspect > 0 ? state.pageAspect : CONFIG.BASE_PAGE_HEIGHT / CONFIG.BASE_PAGE_WIDTH;
+      const maxPageWidth = isMobile ? viewportW : viewportW / 2;
 
       let pageH = viewportH;
       let pageW = pageH / pageAspect;
-      if (pageW > viewportW) {
-        pageW = viewportW;
+      if (pageW > maxPageWidth) {
+        pageW = maxPageWidth;
         pageH = pageW * pageAspect;
       }
 
       return {
         width: Math.max(220, Math.round(pageW)),
         height: Math.max(300, Math.round(pageH)),
-        usePortrait: true,
+        usePortrait: isMobile,
       };
     },
 
