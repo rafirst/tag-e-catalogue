@@ -394,52 +394,6 @@ button {
 .page-number-tab--right { right: 12px; }
 
 /* ==========================================================================
-   DRAG HINT
-   ========================================================================== */
-
-.drag-hint {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(11, 11, 11, 0.85);
-  border: 1px solid rgba(224, 30, 47, 0.35);
-  padding: 10px 20px;
-  border-radius: 30px;
-  font-size: 12.5px;
-  letter-spacing: 0.4px;
-  color: var(--c-gray-light);
-  backdrop-filter: blur(6px);
-  z-index: 15;
-  animation: hintPulse 2.4s ease-in-out infinite;
-  transition: opacity 0.4s ease, visibility 0.4s ease;
-}
-
-.drag-hint.fade-out {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.drag-hint-arrow {
-  color: var(--c-red-bright);
-  font-size: 16px;
-  animation: arrowShift 1.6s ease-in-out infinite;
-}
-
-@keyframes hintPulse {
-  0%, 100% { box-shadow: 0 0 0 rgba(224, 30, 47, 0); }
-  50% { box-shadow: 0 0 18px rgba(224, 30, 47, 0.25); }
-}
-
-@keyframes arrowShift {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(3px); }
-}
-
-/* ==========================================================================
    NAV ZONES (secondary / accessibility — still triggers realistic turn)
    ========================================================================== */
 
@@ -541,7 +495,6 @@ button {
   .topbar { padding: 0 14px; }
   .brand-text { letter-spacing: 2px; font-size: 15px; }
   .progress-track { width: 140px; }
-  .drag-hint { font-size: 11px; padding: 8px 16px; }
 }
 
 @media (max-width: 768px) {
@@ -567,8 +520,4 @@ button {
 
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  .drag-hint,
-  .drag-hint-arrow {
-    animation: none !important;
-  }
 }

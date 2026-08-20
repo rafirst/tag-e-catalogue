@@ -69,7 +69,6 @@
     pageAspect: CONFIG.BASE_PAGE_HEIGHT / CONFIG.BASE_PAGE_WIDTH,
     zoom: 1,
     isDemoMode: false,
-    hintDismissed: false,
     isPanning: false,
     panStart: { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 },
   };
@@ -87,7 +86,6 @@
     bookShell: document.getElementById("book-shell"),
     flipbookEl: document.getElementById("flipbook"),
 
-    dragHint: document.getElementById("drag-hint"),
     navPrev: document.getElementById("nav-prev"),
     navNext: document.getElementById("nav-next"),
 
@@ -640,7 +638,6 @@
 
       this.instance.on("flip", (e) => {
         onPageChanged(e.data + 1);
-        dismissDragHint();
       });
 
       this.instance.on("changeOrientation", () => {
@@ -752,12 +749,6 @@
      INTERAKSI: HINT, NAV ZONE, KEYBOARD
      ========================================================================== */
 
-  function dismissDragHint() {
-    if (state.hintDismissed) return;
-    state.hintDismissed = true;
-    el.dragHint.classList.add("fade-out");
-  }
-
   function setupNavZones() {
     el.stage.addEventListener("click", (event) => {
       if (event.target.closest("#flipbook")) return;
@@ -768,10 +759,8 @@
 
       if (x <= edgeWidth) {
         FlipEngine.prev();
-        dismissDragHint();
       } else if (x >= rect.width - edgeWidth) {
         FlipEngine.next();
-        dismissDragHint();
       }
     });
   }
@@ -780,10 +769,8 @@
     window.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight") {
         FlipEngine.next();
-        dismissDragHint();
       } else if (e.key === "ArrowLeft") {
         FlipEngine.prev();
-        dismissDragHint();
       }
     });
   }
@@ -872,8 +859,6 @@
       setupZoomPan();
       setupResizeListener();
 
-      // Sembunyikan hint drag otomatis setelah beberapa saat jika tak disentuh
-      setTimeout(dismissDragHint, 6000);
     } catch (err) {
       console.error(err);
       // Surface a helpful message + short stack snippet in the UI to aid diagnosis
