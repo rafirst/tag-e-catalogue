@@ -274,6 +274,9 @@ button {
   padding: 0;
   box-sizing: border-box;
   left: 0;
+  transform: scale(var(--book-zoom, 1));
+  transform-origin: center center;
+  transition: transform 0.2s ease;
 }
 
 #flipbook {
@@ -481,6 +484,16 @@ button {
 
 .book-shell.is-zoomed {
   cursor: grab;
+}
+
+.stage.is-zoomed {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.stage.is-zoomed::-webkit-scrollbar {
+  display: none;
 }
 
 .book-shell.is-zoomed.is-panning {

@@ -37,12 +37,27 @@
   const CONFIG = {
     // Ganti path ini dengan PDF katalog asli Anda kapan saja.
     // Updated to use the newly uploaded PDF (replace filename if different).
-    PDF_URL: "https://media.githubusercontent.com/media/rafirst/tag-e-catalogue/main/assets/catalog/TAG-E-CATALOGUE.pdf",
+    PDF_URL: "assets/catalog/TAG-E-CATALOGUE.pdf",
 
-    // Kualitas render halaman (device pixel ratio dibatasi demi performa)
-    // Increase render scale and max DPR for HD output in the flipbook
-    RENDER_SCALE: 2.2,
-    MAX_DPR: 3,
+    // --- Kualitas render halaman (Tier 1: resolusi tetap, tanpa tier zoom) ---
+    // Target lebar output PER HALAMAN (setelah split kiri/kanan jika PDF landscape),
+    // dalam pixel asli. Ini yang membatasi ukuran file, TIDAK lagi dikalikan
+    // devicePixelRatio layar — supaya di layar retina/4K hasil render tidak
+    // ikut membengkak 2-3x lipat padahal mata tidak butuh setajam itu.
+    // 1900px cukup tajam untuk dibaca normal (foto produk + teks besar/menengah)
+    // tanpa perlu zoom, sekaligus menjaga ukuran file per halaman tetap kecil.
+    TARGET_PAGE_WIDTH_PX: 1900,
+
+    // DPR tetap dipertimbangkan (supaya di layar HP retina teks kecil tetap
+    // tajam), tapi dibatasi rendah (1.5) dan hasil akhirnya tetap di-clamp
+    // oleh TARGET_PAGE_WIDTH_PX di atas — jadi DPR tidak bisa membuat file
+    // membengkak tanpa batas seperti MAX_DPR:3 sebelumnya.
+    MAX_DPR: 1.5,
+
+    // Format & kualitas output gambar per halaman.
+    // WebP dipakai otomatis jika didukung browser (~25-35% lebih kecil dari
+    // JPEG di kualitas visual yang sama); browser lama otomatis fallback ke JPEG.
+    IMAGE_QUALITY: 0.82,
 
     // Ukuran dasar satu halaman buku (rasio disesuaikan otomatis dari PDF)
     BASE_PAGE_WIDTH: 560,
@@ -54,6 +69,24 @@
 
     LOADING_TIMEOUT_MS: 120000,
   };
+
+  /* ------------------------------------------------------------------
+     IMAGE FORMAT HELPER — pilih WebP jika didukung, fallback JPEG
+  ------------------------------------------------------------------ */
+  let _preferredImageMime = null;
+  function getPreferredImageMime() {
+    if (_preferredImageMime) return _preferredImageMime;
+    try {
+      const testCanvas = document.createElement("canvas");
+      testCanvas.width = 1;
+      testCanvas.height = 1;
+      const supportsWebp = testCanvas.toDataURL("image/webp").indexOf("image/webp") === 5;
+      _preferredImageMime = supportsWebp ? "image/webp" : "image/jpeg";
+    } catch (e) {
+      _preferredImageMime = "image/jpeg";
+    }
+    return _preferredImageMime;
+  }
 
   /* ------------------------------------------------------------------
      STATE
@@ -219,7 +252,17 @@
     const unscaled = page.getViewport({ scale: 1 });
     const scaleForWidth = (targetPageCssW * state.pagesPerPdfPage * dpr) / unscaled.width;
     const scaleForHeight = (targetPageCssH * dpr) / unscaled.height;
-    const scale = Math.max(1, scaleForWidth, scaleForHeight);
+    let scale = Math.max(1, scaleForWidth, scaleForHeight);
+
+    // TIER 1 CLAMP: apapun ukuran layar/DPR konsumen, lebar akhir per
+    // halaman (setelah split landscape) tidak boleh melebihi
+    // TARGET_PAGE_WIDTH_PX. Ini kunci utama menjaga ukuran file kecil &
+    // konsisten di semua device, sekaligus mencegah render raksasa di
+    // layar 4K/retina yang sebelumnya bisa tembus MAX_DPR x RENDER_SCALE.
+    const singlePageSourceWidth = unscaled.width / state.pagesPerPdfPage;
+    const maxScale = CONFIG.TARGET_PAGE_WIDTH_PX / singlePageSourceWidth;
+    scale = Math.min(scale, maxScale);
+
     const viewport = page.getViewport({ scale });
 
     let canvas = document.createElement("canvas");
@@ -334,8 +377,9 @@
       state.pageMeta[pageNumber] = { width: canvas.width, height: canvas.height };
     }
 
-    // Use higher JPEG quality for crisper results in the flipbook
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    // WebP (jika didukung browser) untuk ukuran file lebih kecil di kualitas
+    // visual yang setara; otomatis fallback ke JPEG di browser lama.
+    const dataUrl = canvas.toDataURL(getPreferredImageMime(), CONFIG.IMAGE_QUALITY);
     state.renderedPages.set(pageNumber, dataUrl);
 
     // Simpan rasio aspek dari halaman pertama untuk menyesuaikan bentuk buku
@@ -598,46 +642,39 @@
 
       state.pageFlip = this.instance;
 
-      // Load the first page first so the book is visible while other pages render.
+      // ------------------------------------------------------------------
+      // LAZY LOAD SESUNGGUHNYA (Phase 11 fix):
+      // Sebelumnya di sini ada loop yang me-render SEMUA halaman katalog
+      // secara berurutan sebelum event "flip" dipasang — akibatnya buku
+      // baru bisa dipakai/dinavigasi setelah SELURUH halaman selesai
+      // dirender, walau kelihatannya "muncul" dari halaman 1. Untuk
+      // katalog besar ini yang membuat load terasa sangat lama.
+      //
+      // Sekarang: hanya halaman 1 yang dirender & ditunggu. Sisanya diisi
+      // placeholder ringan, event navigasi langsung aktif, dan halaman di
+      // sekitar posisi baca dirender di background via lazyRenderAroundPage
+      // — persis seperti yang sudah didesain di fungsi tsb sebelumnya,
+      // hanya saja sebelumnya tidak pernah benar-benar dipanggil.
+      // ------------------------------------------------------------------
+      this.images = new Array(state.pageCount).fill(buildPlaceholderDataUrl());
+
       try {
-        const firstPage = await renderPdfPageToDataUrl(1);
-        const images = [firstPage];
+        this.images[0] = await renderPdfPageToDataUrl(1);
         state.renderedPages.set("__injected_1", true);
-        this.instance.loadFromImages(images);
-
-        // Render the remaining pages in the background and refresh the book.
-        for (let p = 2; p <= state.pageCount; p++) {
-          images.push(await renderPdfPageToDataUrl(p));
-          state.renderedPages.set("__injected_" + p, true);
-          if (typeof this.instance.updateFromImages === "function") {
-            this.instance.updateFromImages(images);
-          }
-        }
-
-        // Post-load verification
-        setTimeout(() => {
-          const imgs = el.flipbookEl.querySelectorAll('img');
-          const imgCount = imgs ? imgs.length : 0;
-          const diag = {
-            pageCount: state.pageCount,
-            imgCount,
-            computedDims: dims,
-            pageMeta: state.pageMeta,
-          };
-          if (imgCount === 0) {
-            showDiagnostics(diag);
-          } else {
-            console.info('Flipbook loaded successfully', diag);
-          }
-        }, 120);
+        this.instance.loadFromImages(this.images);
       } catch (err) {
-        console.error('Prerender all pages failed', err);
-        showError({ message: 'Gagal merender halaman katalog.', _details: (err && err.stack) ? err.stack.split('\n').slice(0,6).join('\n') : String(err) });
+        console.error("Render halaman pertama gagal", err);
+        showError({ message: "Gagal merender halaman katalog.", _details: (err && err.stack) ? err.stack.split('\n').slice(0,6).join('\n') : String(err) });
         return;
       }
 
+      // Pasang event navigasi SEKARANG juga — konsumen sudah bisa membalik
+      // halaman meski halaman selanjutnya belum selesai dirender (akan
+      // menampilkan placeholder singkat lalu berganti gambar asli).
       this.instance.on("flip", (e) => {
-        onPageChanged(e.data + 1);
+        const pageNumber = e.data + 1;
+        onPageChanged(pageNumber);
+        lazyRenderAroundPage(pageNumber, this.images);
       });
 
       this.instance.on("changeOrientation", () => {
@@ -645,6 +682,10 @@
       });
 
       onPageChanged(1);
+
+      // Render halaman di sekitar halaman 1 di background, TANPA di-await,
+      // supaya init() selesai dan UI langsung responsif.
+      lazyRenderAroundPage(1, this.images);
     },
 
     handleResize() {
@@ -679,59 +720,62 @@
     },
   };
 
-  function buildPagePlaceholder(pageNumber) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "page";
-    wrapper.setAttribute("data-page-number", String(pageNumber));
-
-    const content = document.createElement("div");
-    content.className = "page-content";
-
-    const placeholder = document.createElement("div");
-    placeholder.className = "page-loading-placeholder";
-    placeholder.textContent = "Memuat...";
-    content.appendChild(placeholder);
-
-    wrapper.appendChild(content);
-    return wrapper;
+  /**
+   * Gambar placeholder ringan (dipakai sekali, di-cache) untuk halaman
+   * yang belum dirender — dipasang ke array `images` StPageFlip supaya
+   * total jumlah halaman langsung benar sejak awal tanpa menunggu semua
+   * halaman selesai dirender.
+   */
+  let _placeholderDataUrl = null;
+  function buildPlaceholderDataUrl() {
+    if (_placeholderDataUrl) return _placeholderDataUrl;
+    const aspect = state.pageAspect > 0 ? state.pageAspect : (CONFIG.BASE_PAGE_HEIGHT / CONFIG.BASE_PAGE_WIDTH);
+    const w = 300;
+    const h = Math.round(w * aspect);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#efece6";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#9a9690";
+    ctx.font = "13px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Memuat...", w / 2, h / 2);
+    _placeholderDataUrl = canvas.toDataURL(getPreferredImageMime(), 0.6);
+    return _placeholderDataUrl;
   }
 
   /**
-   * Merender gambar untuk halaman aktif ± 2 halaman di sekitarnya
-   * (lazy rendering demi performa pada katalog besar — Phase 11 / #23).
+   * Merender halaman aktif ± beberapa halaman di sekitarnya di background,
+   * lalu menyuntikkan hasilnya ke array `images` StPageFlip via
+   * updateFromImages — supaya konsumen tidak pernah harus menunggu SEMUA
+   * halaman katalog selesai dirender terlebih dahulu (lazy load nyata).
    */
-  async function lazyRenderAroundPage(centerPage) {
+  async function lazyRenderAroundPage(centerPage, images) {
     const range = [];
-    for (let p = centerPage - 2; p <= centerPage + 3; p++) {
-      if (p >= 1 && p <= state.pageCount) range.push(p);
+    for (let p = centerPage - 1; p <= centerPage + 2; p++) {
+      if (p >= 1 && p <= state.pageCount && !state.renderedPages.has("__injected_" + p)) {
+        range.push(p);
+      }
     }
+    if (!range.length) return;
 
     await Promise.all(
       range.map(async (pageNum) => {
-        if (state.renderedPages.has("__injected_" + pageNum)) return;
         try {
           const dataUrl = await renderPdfPageToDataUrl(pageNum);
-          injectImageIntoPage(pageNum, dataUrl);
+          images[pageNum - 1] = dataUrl;
           state.renderedPages.set("__injected_" + pageNum, true);
         } catch (err) {
           console.error("Gagal merender halaman", pageNum, err);
         }
       })
     );
-  }
 
-  function injectImageIntoPage(pageNumber, dataUrl) {
-    const pageEl = el.flipbookEl.querySelector(
-      `.page[data-page-number="${pageNumber}"] .page-content`
-    );
-    if (!pageEl) return;
-
-    pageEl.innerHTML = "";
-    const img = document.createElement("img");
-    img.src = dataUrl;
-    img.alt = `Halaman ${pageNumber}`;
-    img.draggable = false;
-    pageEl.appendChild(img);
+    if (FlipEngine.instance && typeof FlipEngine.instance.updateFromImages === "function") {
+      FlipEngine.instance.updateFromImages(images);
+    }
   }
 
   /* ==========================================================================
@@ -780,9 +824,9 @@
      ========================================================================== */
 
   function applyZoom() {
-    el.bookShell.style.transform = `scale(${state.zoom})`;
-    el.bookShell.style.transformOrigin = "center center";
+    el.bookShell.style.setProperty("--book-zoom", String(state.zoom));
     el.bookShell.classList.toggle("is-zoomed", state.zoom > 1);
+    el.stage.classList.toggle("is-zoomed", state.zoom > 1);
   }
 
   function zoomIn() {
@@ -849,15 +893,15 @@
   async function boot() {
     try {
       el.app.classList.remove("hidden");
-      await loadPdf();
-
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await FlipEngine.init();
-
       setupNavZones();
       setupKeyboard();
       setupZoomPan();
       setupResizeListener();
+
+      await loadPdf();
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await FlipEngine.init();
 
     } catch (err) {
       console.error(err);
